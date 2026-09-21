@@ -4226,32 +4226,36 @@ Réponds en français (sauf demande contraire). Sois clair, structuré et utile.
 // ───────────── ADMIN (Super Admin) ─────────────
 
 async function getAdminCredentials(env) {
-  const raw = await env.CASHFLOW_KV.get('admin:credentials');
-  if (raw) return JSON.parse(raw);
-  // Première initialisation à partir du secret Cloudflare ADMIN_INITIAL_PASSWORD
-  const salt = randomSalt();
-  const hash = await hashPassword(env.ADMIN_INITIAL_PASSWORD, salt);
-  const creds = { salt, hash };
-  await env.CASHFLOW_KV.put('admin:credentials', JSON.stringify(creds));
-  return creds;
+  // Déprécié — les credentials admin sont gérés par le Super Admin NyXia dans la KV partagée.
+  return null;
 }
 
 async function requireAdmin(request, env) {
-  const token = request.headers.get('X-Admin-Token');
+  // Lit directement la session KV partagée avec tous les portails NyXia.
+  // Compatible Super Admin : le rôle est écrit par ton portail Super Admin dans session:TOKEN.
+  const token = request.headers.get('X-Admin-Token')
+    || request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '')
+    || (await request.clone().json().catch(() => ({}))).token
+    || '';
   if (!token) return false;
-  const raw = await env.CASHFLOW_KV.get(`admin_session:${token}`);
-  return !!raw;
+  const raw = await env.CASHFLOW_KV.get('session:' + token);
+  if (!raw) return false;
+  try {
+    const session = JSON.parse(raw);
+    const role = String(session.role || '').toLowerCase();
+    return role === 'admin' || role === 'superadmin';
+  } catch (_) { return false; }
 }
 
 async function handleAdminLogin(request, env) {
-  const { password } = await request.json();
-  const creds = await getAdminCredentials(env);
-  const valid = await verifyPassword(password, creds.salt, creds.hash);
-  if (!valid) return json({ error: 'Mot de passe incorrect.' }, 401);
-
-  const token = randomToken();
-  await env.CASHFLOW_KV.put(`admin_session:${token}`, '1', { expirationTtl: ADMIN_SESSION_TTL });
-  return json({ success: true, token });
+  // Les admins se connectent via /api/login standard avec leur compte D1 (role = admin | superadmin).
+  // Cette route legacy est conservée pour compatibilité mais redirige vers /api/login.
+  const body = await request.json().catch(() => ({}));
+  return handleLogin(new Request(request.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: body.email || '', password: body.password || '' })
+  }), env);
 }
 
 async function handleAdminListClients(request, env) {
@@ -4350,16 +4354,8 @@ async function handleAdminDeleteClient(request, env) {
 }
 
 async function handleAdminChangePassword(request, env) {
-  if (!await requireAdmin(request, env)) return json({ error: 'Non autorisé.' }, 401);
-  const { currentPassword, newPassword } = await request.json();
-  const creds = await getAdminCredentials(env);
-  const valid = await verifyPassword(currentPassword, creds.salt, creds.hash);
-  if (!valid) return json({ error: 'Mot de passe actuel incorrect.' }, 401);
-
-  const salt = randomSalt();
-  const hash = await hashPassword(newPassword, salt);
-  await env.CASHFLOW_KV.put('admin:credentials', JSON.stringify({ salt, hash }));
-  return json({ success: true });
+  // Le changement de mot de passe admin est géré par le Super Admin NyXia.
+  return json({ error: 'Utilisez le Super Admin NyXia pour changer le mot de passe.' }, 410);
 }
 
 // ───────────── MESSAGERIE INTERNE ─────────────
