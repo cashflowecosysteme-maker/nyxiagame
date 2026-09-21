@@ -2992,15 +2992,28 @@ async function gameCaller(request, env, body) {
   if (!session?.email) return null;
   const role = String(session.role || '').toLowerCase();
   const admin = role === 'admin' || role === 'superadmin';
+
+  // Les admins et super-admins ont toujours accès — pas besoin de vérifier le KV client.
+  if (admin) return { session, client: null, allowed: true, admin: true, entitlement: null };
+
   const raw = await env.CASHFLOW_KV.get('client:' + String(session.email).toLowerCase());
   let client = null; try { client = raw ? JSON.parse(raw) : null; } catch (_) {}
   const id = gameId(env);
+
+  // Si GAME_ID n'est pas configuré : tous les comptes connectés ont accès (mode dev).
+  if (!id) return { session, client, allowed: true, admin: false, entitlement: null };
+
   const products = Array.isArray(client?.products) ? client.products.map(String) : [];
   const entitlement = client?.entitlements && id ? client.entitlements[id] : null;
   const exp = entitlement?.expiresAt ? Date.parse(entitlement.expiresAt) : null;
   const expires = Number.isFinite(exp) && exp < Date.now();
-  const allowed = admin || !id || (!!client && client.active !== false && products.includes(id) && entitlement?.active !== false && !expires);
-  return {session,client,allowed,admin,entitlement};
+
+  // Compte KV avec accès explicite OU compte D1 affiliate actif (rôle affiliate = accès au jeu de son cercle).
+  const hasKvAccess = !!client && client.active !== false && products.includes(id) && entitlement?.active !== false && !expires;
+  const hasD1Access = role === 'affiliate' && !client; // compte D1 sans entrée KV = accès de base
+
+  const allowed = hasKvAccess || hasD1Access;
+  return { session, client, allowed, admin: false, entitlement };
 }
 async function gamePublicInfo(env) {
   const p = await gameProduct(env);
