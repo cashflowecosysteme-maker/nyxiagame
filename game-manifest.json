@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "gameId": "",
+  "title": "",
+  "shortTitle": "",
+  "universe": "",
+  "description": "",
+  "players": { "minimum": null, "maximum": null },
+  "duration": "",
+  "difficulty": "",
+  "modes": [],
+  "allowedOrigins": [],
+  "pages": { "game": "" },
+  "resources": {
+    "information": "",
+    "materials": "",
+    "mjBook": "",
+    "playerBook": "",
+    "characterSheet": "",
+    "broadcastTraining": "",
+    "cercle": "",
+    "shop": "",
+    "directory": "",
+    "map": ""
+  },
+  "conversations": { "nyxia": "", "diane": "", "eric": "" },
+  "npcs": []
+}
