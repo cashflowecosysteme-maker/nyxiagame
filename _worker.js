@@ -3092,20 +3092,21 @@ export default {
 const url = new URL(request.url);
     const path = url.pathname;
 
-    // Pages publiques — jamais redirigées, jamais protégées.
-    const PUBLIC_PATHS = ['/', '/index.html', '/login', '/login.html', '/inscription.html'];
-    if (PUBLIC_PATHS.includes(path)) {
-      // Alias propres sans .html
-      if (path === '/login') return Response.redirect(url.origin + '/login.html' + url.search, 302);
-      if (path === '/dashbord') return Response.redirect(url.origin + '/dashbord.html' + url.search, 302);
-    }
-    if (path === '/dashbord') {
-      return Response.redirect(url.origin + '/dashbord.html' + url.search, 302);
-    }
-    // Lien de création d'équipe / parrainage → inscription
+    // Alias de navigation — une seule redirection, jamais en chaîne.
+    if (path === '/login')    return Response.redirect(url.origin + '/login.html', 302);
+    if (path === '/dashbord') return Response.redirect(url.origin + '/dashbord.html', 302);
+
+    // Lien parrainage
     if (path.startsWith('/r/')) {
       const code = path.slice(3).split('/')[0];
       return Response.redirect(url.origin + '/inscription.html?ref=' + encodeURIComponent(code), 302);
+    }
+
+    // Pages toujours publiques — le worker ne les touche pas.
+    const PUBLIC_PATHS = ['/', '/index.html', '/login.html', '/inscription.html'];
+    if (PUBLIC_PATHS.includes(path)) {
+      if (env.ASSETS) return env.ASSETS.fetch(request);
+      return new Response('Page introuvable.', { status: 404 });
     }
 
     try {
