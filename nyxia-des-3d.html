@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NyXia — Dés 3D</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #07001a;
+    font-family: Georgia, serif;
+    color: #d4b8ff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  header {
+    padding: 20px 0 10px;
+    font-size: 22px;
+    letter-spacing: 4px;
+    color: #cc88ff;
+    text-shadow: 0 0 20px #7733cc;
+  }
+
+  #dice-box {
+    width: 100%;
+    max-width: 800px;
+    height: 420px;
+    position: relative;
+    margin: 10px 0;
+  }
+
+  /* La lib injecte un canvas ici */
+  #dice-box canvas {
+    border-radius: 12px;
+    border: 1px solid #3a0a7a;
+  }
+
+  #result-bar {
+    font-size: 28px;
+    font-weight: bold;
+    color: #f0e0ff;
+    text-shadow: 0 0 16px #9933ff;
+    letter-spacing: 2px;
+    min-height: 44px;
+    text-align: center;
+    margin: 8px 0;
+  }
+
+  #detail-bar {
+    font-size: 14px;
+    color: #9966cc;
+    letter-spacing: 1px;
+    min-height: 20px;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  /* Sélecteur de dés */
+  #selector {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 16px;
+    max-width: 700px;
+  }
+
+  .die-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .die-icon {
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #4a1a8a;
+    border-radius: 10px;
+    background: #0f0030;
+    font-size: 13px;
+    font-weight: bold;
+    color: #cc88ff;
+    position: relative;
+    transition: all 0.15s;
+  }
+
+  .die-icon svg {
+    width: 42px;
+    height: 42px;
+    fill: #7744bb;
+    transition: fill 0.15s;
+  }
+
+  .die-icon .die-label-inner {
+    position: absolute;
+    font-size: 11px;
+    font-weight: bold;
+    color: #e8d0ff;
+    pointer-events: none;
+  }
+
+  .die-btn:hover .die-icon {
+    border-color: #9955ff;
+    background: #1a0050;
+  }
+  .die-btn:hover .die-icon svg { fill: #cc88ff; }
+
+  .die-count {
+    background: #2a0060;
+    color: #cc88ff;
+    border: 1px solid #5522aa;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    font-size: 13px;
+  }
+
+  .die-count button {
+    background: none;
+    border: none;
+    color: #9966cc;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 2px;
+    font-family: Georgia, serif;
+  }
+  .die-count button:hover { color: #fff; }
+  .die-count span { min-width: 18px; text-align: center; }
+
+  .die-name {
+    font-size: 12px;
+    color: #7744bb;
+    letter-spacing: 1px;
+  }
+
+  /* Actions */
+  #actions {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .btn {
+    background: #1e0055;
+    color: #cc99ff;
+    border: 1px solid #6633aa;
+    border-radius: 8px;
+    padding: 10px 28px;
+    cursor: pointer;
+    font-family: Georgia, serif;
+    font-size: 15px;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+  .btn:hover { background: #330077; border-color: #aa66ff; color: #fff; }
+  .btn:active { transform: scale(0.97); }
+  .btn.primary {
+    background: #3a0088;
+    border-color: #9944ff;
+    font-size: 16px;
+    padding: 12px 36px;
+  }
+  .btn.primary:hover { background: #5500bb; }
+
+  /* Modificateur */
+  #mod-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: #9966cc;
+  }
+  #mod-row input {
+    width: 60px;
+    background: #0f0030;
+    border: 1px solid #4a1a8a;
+    border-radius: 6px;
+    color: #e0c8ff;
+    font-family: Georgia, serif;
+    font-size: 15px;
+    text-align: center;
+    padding: 4px;
+  }
+
+  /* Historique */
+  #history {
+    max-width: 700px;
+    width: 100%;
+    margin: 0 16px 20px;
+  }
+  #history h3 {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: #5533aa;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  #history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 140px;
+    overflow-y: auto;
+  }
+  .hist-item {
+    background: #0a0025;
+    border: 1px solid #2a0055;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .hist-total { color: #f0c060; font-weight: bold; }
+  .hist-detail { color: #6644aa; font-size: 11px; }
+
+  /* Thème couleur dé */
+  .color-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: #7744bb;
+  }
+  .color-swatch {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.15s;
+  }
+  .color-swatch.active { border-color: #fff; }
+</style>
+</head>
+<body>
+
+<header>✦ NyXia — Dés 3D ✦</header>
+
+<div id="dice-box"></div>
+
+<div id="result-bar">Choisissez vos dés et lancez !</div>
+<div id="detail-bar"></div>
+
+<!-- Sélecteur de dés -->
+<div id="selector">
+  <!-- généré par JS -->
+</div>
+
+<!-- Modificateur -->
+<div id="mod-row">
+  <label for="modifier">Modificateur :</label>
+  <input type="number" id="modifier" value="0" min="-20" max="20" step="1">
+</div>
+
+<!-- Couleur -->
+<div class="color-row">
+  Couleur :
+  <div class="color-swatch active" style="background:#7733bb" data-theme="purple" onclick="setTheme(this,'#7733bb','#cc88ff')"></div>
+  <div class="color-swatch" style="background:#1a5599" data-theme="blue" onclick="setTheme(this,'#1a5599','#88bbff')"></div>
+  <div class="color-swatch" style="background:#993322" data-theme="red" onclick="setTheme(this,'#993322','#ff8866')"></div>
+  <div class="color-swatch" style="background:#226644" data-theme="green" onclick="setTheme(this,'#226644','#66ffaa')"></div>
+  <div class="color-swatch" style="background:#222222" data-theme="black" onclick="setTheme(this,'#111','#cccccc')"></div>
+</div>
+
+<!-- Actions -->
+<div id="actions">
+  <button class="btn" onclick="clearDice()">Effacer</button>
+  <button class="btn primary" onclick="roll()">✦ Lancer les dés</button>
+  <button class="btn" onclick="resetAll()">Reset</button>
+</div>
+
+<!-- Historique -->
+<div id="history">
+  <h3>Historique</h3>
+  <div id="history-list"></div>
+</div>
+
+<script type="module">
+// ─── dice-box depuis jsdelivr ESM ──────────────────────────────────────────
+// dice-box nécessite ses propres assets (workers, wasm, themes).
+// On utilise la version hébergée sur jsdelivr en ESM.
+// NOTE : cette page doit être servie via HTTP(S), pas file://
+
+import DiceBox from 'https://cdn.jsdelivr.net/npm/@3d-dice/dice-box@1.1.4/dist/dice-box.es.min.js';
+
+// Couleur active
+let diceColor = '#7733bb';
+let diceColorLight = '#cc88ff';
+
+window.setTheme = function(el, col, colLight) {
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  diceColor = col;
+  diceColorLight = colLight;
+};
+
+// ─── Config dés ──────────────────────────────────────────────────────────
+const DIE_TYPES = [
+  { key: 'd4',  label: 'D4',  sides: 4  },
+  { key: 'd6',  label: 'D6',  sides: 6  },
+  { key: 'd8',  label: 'D8',  sides: 8  },
+  { key: 'd10', label: 'D10', sides: 10 },
+  { key: 'd12', label: 'D12', sides: 12 },
+  { key: 'd20', label: 'D20', sides: 20 },
+];
+
+const counts = {};
+DIE_TYPES.forEach(d => counts[d.key] = 0);
+
+// ─── SVG shapes pour les dés ─────────────────────────────────────────────
+const SVG = {
+  d4:  `<svg viewBox="0 0 100 100"><polygon points="50,8 95,88 5,88"/></svg>`,
+  d6:  `<svg viewBox="0 0 100 100"><rect x="10" y="10" width="80" height="80" rx="10"/></svg>`,
+  d8:  `<svg viewBox="0 0 100 100"><polygon points="50,5 95,50 50,95 5,50"/></svg>`,
+  d10: `<svg viewBox="0 0 100 100"><polygon points="50,5 95,35 80,90 20,90 5,35"/></svg>`,
+  d12: `<svg viewBox="0 0 100 100"><polygon points="50,5 82,18 95,50 82,82 50,95 18,82 5,50 18,18"/></svg>`,
+  d20: `<svg viewBox="0 0 100 100"><polygon points="50,5 90,30 90,70 50,95 10,70 10,30"/></svg>`,
+};
+
+// ─── Build sélecteur ─────────────────────────────────────────────────────
+const sel = document.getElementById('selector');
+DIE_TYPES.forEach(die => {
+  const wrap = document.createElement('div');
+  wrap.className = 'die-btn';
+  wrap.innerHTML = `
+    <div class="die-icon">
+      ${SVG[die.key]}
+      <span class="die-label-inner">${die.label}</span>
+    </div>
+    <div class="die-count">
+      <button onclick="change('${die.key}',-1)">−</button>
+      <span id="cnt-${die.key}">0</span>
+      <button onclick="change('${die.key}',+1)">+</button>
+    </div>
+    <div class="die-name">${die.label}</div>
+  `;
+  // Clic sur l'icône = +1
+  wrap.querySelector('.die-icon').addEventListener('click', () => change(die.key, 1));
+  sel.appendChild(wrap);
+});
+
+window.change = function(key, delta) {
+  counts[key] = Math.max(0, Math.min(10, counts[key] + delta));
+  document.getElementById('cnt-' + key).textContent = counts[key];
+};
+
+// ─── Init DiceBox ─────────────────────────────────────────────────────────
+let Box;
+let rolling = false;
+
+async function init() {
+  Box = new DiceBox({
+    assetPath: 'https://cdn.jsdelivr.net/npm/@3d-dice/dice-box@1.1.4/dist/assets/',
+    container: '#dice-box',
+    gravity: 2,
+    mass: 1,
+    friction: 0.8,
+    restitution: 0.5,
+    angularDamping: 0.4,
+    linearDamping: 0.4,
+    spinForce: 6,
+    throwForce: 3.5,
+    startingHeight: 8,
+    settleTimeout: 5000,
+    offscreen: true,
+    delay: 10,
+    enableShadows: true,
+    theme: 'default',
+    themeColor: diceColor,
+  });
+
+  await Box.init();
+
+  Box.onRollComplete = (results) => {
+    rolling = false;
+    let total = 0;
+    const parts = [];
+    results.forEach(group => {
+      group.rolls.forEach(r => {
+        total += r.value;
+        parts.push(`${group.notation}:${r.value}`);
+      });
+    });
+    const mod = parseInt(document.getElementById('modifier').value) || 0;
+    const grand = total + mod;
+    const modStr = mod !== 0 ? (mod > 0 ? ` + ${mod}` : ` − ${Math.abs(mod)}`) : '';
+    document.getElementById('result-bar').textContent =
+      `Total : ${grand}${mod !== 0 ? ` (${total}${modStr})` : ''}`;
+    document.getElementById('detail-bar').textContent =
+      parts.join('  ·  ');
+    addHistory(grand, parts.join(', '), mod);
+  };
+}
+
+// ─── Roll ─────────────────────────────────────────────────────────────────
+window.roll = async function() {
+  if (rolling) return;
+  const notation = DIE_TYPES
+    .filter(d => counts[d.key] > 0)
+    .map(d => `${counts[d.key]}${d.key}`)
+    .join('+');
+  if (!notation) {
+    document.getElementById('result-bar').textContent = 'Sélectionnez au moins un dé !';
+    return;
+  }
+  rolling = true;
+  document.getElementById('result-bar').textContent = '⟳ En cours…';
+  document.getElementById('detail-bar').textContent = '';
+  Box.updateConfig({ themeColor: diceColor });
+  await Box.roll(notation);
+};
+
+window.clearDice = function() {
+  Box.clear();
+  document.getElementById('result-bar').textContent = 'Choisissez vos dés et lancez !';
+  document.getElementById('detail-bar').textContent = '';
+};
+
+window.resetAll = function() {
+  DIE_TYPES.forEach(d => { counts[d.key] = 0; document.getElementById('cnt-' + d.key).textContent = '0'; });
+  document.getElementById('modifier').value = 0;
+  Box.clear();
+  document.getElementById('result-bar').textContent = 'Choisissez vos dés et lancez !';
+  document.getElementById('detail-bar').textContent = '';
+};
+
+// ─── Historique ────────────────────────────────────────────────────────────
+const histList = document.getElementById('history-list');
+function addHistory(total, detail, mod) {
+  const item = document.createElement('div');
+  item.className = 'hist-item';
+  const modStr = mod !== 0 ? ` (mod ${mod > 0 ? '+' : ''}${mod})` : '';
+  item.innerHTML = `
+    <span>${new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})} — ${detail}${modStr}</span>
+    <span class="hist-total">${total}</span>
+  `;
+  histList.prepend(item);
+  while (histList.children.length > 10) histList.removeChild(histList.lastChild);
+}
+
+init().catch(e => {
+  document.getElementById('result-bar').textContent = 'Erreur de chargement — vérifiez votre connexion.';
+  console.error(e);
+});
+</script>
+</body>
+</html>
