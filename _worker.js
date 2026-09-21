@@ -3182,6 +3182,13 @@ const url = new URL(request.url);
       }
     }
 
+    // L'image Éric est l'original Eric.png du dépôt GitHub, jamais un avatar de remplacement.
+    // Le chemin rangé fonctionne aussi avant le déplacement physique du PNG existant.
+    if (path === '/images/Eric.png' && env.ASSETS) {
+      const stored = await env.ASSETS.fetch(request);
+      if (stored.ok && (stored.headers.get('content-type') || '').startsWith('image/')) return stored;
+      return env.ASSETS.fetch(new Request(new URL('/Eric.png', request.url), request));
+    }
     // Fichiers statiques : index.html (vente), login, tableau de bord, chats et images.
     if (env.ASSETS) return env.ASSETS.fetch(request);
     return json({ error: 'Route introuvable.' }, 404);
