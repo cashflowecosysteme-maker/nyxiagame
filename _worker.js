@@ -3092,9 +3092,12 @@ export default {
 const url = new URL(request.url);
     const path = url.pathname;
 
-    // La racine reste réservée à index.html : la page de vente du portail Léna.
-    if (path === '/login') {
-      return Response.redirect(url.origin + '/login.html' + url.search, 302);
+    // Pages publiques — jamais redirigées, jamais protégées.
+    const PUBLIC_PATHS = ['/', '/index.html', '/login', '/login.html', '/inscription.html'];
+    if (PUBLIC_PATHS.includes(path)) {
+      // Alias propres sans .html
+      if (path === '/login') return Response.redirect(url.origin + '/login.html' + url.search, 302);
+      if (path === '/dashbord') return Response.redirect(url.origin + '/dashbord.html' + url.search, 302);
     }
     if (path === '/dashbord') {
       return Response.redirect(url.origin + '/dashbord.html' + url.search, 302);
@@ -3185,13 +3188,15 @@ const url = new URL(request.url);
     if (path.startsWith('/api/')) return json({ error: 'Fonction introuvable.' }, 404);
 
     // Pages membres : session obligatoire (token ?t= ou session KV).
+    // Pages protégées — login.html et index.html sont TOUJOURS publiques.
     const PROTECTED_PAGES = ['/dashbord.html', '/ovilus.html', '/jeu.html'];
     const isProtected = PROTECTED_PAGES.includes(path) || path.startsWith('/chat-');
     if (isProtected && env.CASHFLOW_KV) {
       const tok = url.searchParams.get('t') || url.searchParams.get('token') || gameCookieToken(request) || '';
       const session = tok ? await getSessionFromToken(env, tok) : null;
       if (!session) {
-        return Response.redirect(url.origin + '/login', 302);
+        // Redirection directe vers login.html — jamais vers /login pour éviter toute boucle.
+        return Response.redirect(url.origin + '/login.html', 302);
       }
     }
 
