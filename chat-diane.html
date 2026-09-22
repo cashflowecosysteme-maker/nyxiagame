@@ -504,7 +504,7 @@
       var seed = Math.floor(Math.random() * 999999)
       var primaryUrl = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(cleanDesc + ', high quality, detailed, coherent composition') + '?width=768&height=768&model=flux&seed=' + seed + '&private=true'
 
-      var img = document.createElement('img'); img.alt = cleanDesc; img.crossOrigin = 'anonymous'
+      var img = document.createElement('img'); img.alt = cleanDesc
       var hasRetried = false
 
       img.onload = function() {
