@@ -1800,8 +1800,8 @@ function pickLatestProgressFormation(formations, progressAll) {
 
 // Petit repère de navigation (pas du contenu de formation : simple accompagnement du formateur).
 function formationNavHint(isLastOfModule, isLastOfFormation) {
-  if (isLastOfFormation) return '— Tu arrives au bout de cette formation ✨ Dis-moi « suite » pour la conclure, ou pose-moi tes questions pour appliquer tout ça à ton livre.';
-  if (isLastOfModule) return '— Tu as terminé ce module 🎉 Dis « suite » pour passer au suivant, ou pose-moi tes questions sur cette étape.';
+  if (isLastOfFormation) return '— Tu arrives au bout des informations pour ce jeu ✨ Dis-moi « suite » pour conclure, ou pose-moi tes questions.';
+  if (isLastOfModule) return '— Tu as terminé cette section 🎉 Dis « suite » pour passer au suivant, ou pose-moi tes questions sur cette étape.';
   return '— Quand tu es prêt·e, dis « suite » pour la prochaine étape 💜 (ou pose-moi tes questions).';
 }
 
