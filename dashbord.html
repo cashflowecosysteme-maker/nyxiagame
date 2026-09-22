@@ -52,6 +52,14 @@
           <img class="nav-avatar" src="/images/Eric.png?v=20260922" alt="Éric">
           <span class="nav-text"><span class="nav-name">Éric</span><span class="nav-sub">Cercle d’entraide</span></span><span class="nav-arrow">›</span>
         </div>
+        <div class="nav-dropdown" id="nxg-characters">
+          <button type="button" class="nav-dropdown-trigger" id="nxg-characters-trigger" onclick="toggleGameCharacters()" aria-expanded="false" aria-controls="nxg-characters-menu">
+            <span aria-hidden="true">👄</span>
+            <span class="nav-dropdown-title">Personnages</span>
+            <span class="nav-dropdown-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="nav-dropdown-menu" id="nxg-characters-menu"></div>
+        </div>
       </div>
       <div class="sidebar-section">
         <div class="sidebar-label">Le jeu</div>
@@ -316,6 +324,82 @@
     }
 
     /* ═══════ NAVIGATION ═══════ */
+    // Menu des personnages du jeu : reprend les PNJ déjà chargés dans le sélecteur existant.
+    function renderGameCharactersMenu() {
+      var menu = document.getElementById('nxg-characters-menu')
+      var select = document.getElementById('nxg-npc-picker')
+      if (!menu || !select) return
+      menu.replaceChildren()
+      var entries = Array.prototype.filter.call(select.options, function(opt) { return opt.value })
+      if (!entries.length) {
+        var empty = document.createElement('span')
+        empty.textContent = 'Aucun personnage pour le moment'
+        empty.style.cssText = 'display:block;padding:9px;color:var(--t3);font-size:12px'
+        menu.appendChild(empty)
+        return
+      }
+      entries.forEach(function(opt) {
+        var item = document.createElement('div')
+        item.className = 'nav-item'
+        item.id = 'nav-pnj-' + opt.value
+        item.setAttribute('role', 'button')
+        item.tabIndex = 0
+        var avatar = document.createElement('img')
+        avatar.className = 'nav-avatar'
+        avatar.src = '/images/PNJ-avatar.png'
+        avatar.alt = ''
+        var text = document.createElement('span')
+        text.className = 'nav-text'
+        var name = document.createElement('span')
+        name.className = 'nav-name'
+        name.textContent = opt.textContent
+        var sub = document.createElement('span')
+        sub.className = 'nav-sub'
+        sub.textContent = 'Personnage du jeu'
+        text.appendChild(name)
+        text.appendChild(sub)
+        var arrow = document.createElement('span')
+        arrow.className = 'nav-arrow'
+        arrow.textContent = '›'
+        item.appendChild(avatar)
+        item.appendChild(text)
+        item.appendChild(arrow)
+        var open = function() { nxgSelectNpc(opt.value) }
+        item.addEventListener('click', open)
+        item.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() }
+        })
+        menu.appendChild(item)
+      })
+      var active = document.getElementById('agent-iframe')?.getAttribute('data-agent') || ''
+      var activeItem = document.getElementById('nav-' + active)
+      if (activeItem && menu.contains(activeItem)) activeItem.classList.add('active')
+    }
+
+    function toggleGameCharacters() {
+      var dropdown = document.getElementById('nxg-characters')
+      var trigger = document.getElementById('nxg-characters-trigger')
+      if (!dropdown || !trigger) return
+      var open = !dropdown.classList.contains('open')
+      if (open) renderGameCharactersMenu()
+      dropdown.classList.toggle('open', open)
+      trigger.setAttribute('aria-expanded', open ? 'true' : 'false')
+    }
+
+    function updateGameCharactersState(key) {
+      var dropdown = document.getElementById('nxg-characters')
+      if (!dropdown) return
+      var isNpc = typeof key === 'string' && key.indexOf('pnj-') === 0
+      dropdown.classList.toggle('has-active', isNpc)
+      if (isNpc) {
+        renderGameCharactersMenu()
+        dropdown.classList.add('open')
+        document.getElementById('nxg-characters-trigger').setAttribute('aria-expanded', 'true')
+        var current = document.getElementById('nav-' + key)
+        if (current) current.classList.add('active')
+      }
+    }
+
     var WRITING_WORKSHOP_AGENTS = ['daphnee', 'alexandra', 'gabrielle']
 
     function isWritingWorkshopAgent(key) {
@@ -336,6 +420,7 @@
     }
 
     function updateWritingWorkshopState(key) {
+      updateGameCharactersState(key)
       var workshop = document.getElementById('writing-workshop')
       if (!workshop) return
       var isWorkshopAgent = isWritingWorkshopAgent(key)
