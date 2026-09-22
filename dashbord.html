@@ -56,7 +56,7 @@
       <div class="sidebar-section">
         <div class="sidebar-label">Le jeu</div>
         <div class="nav-item" id="nav-jeu" onclick="nxgOpenPanel('jeu')"><span class="nav-icon">🎮</span><span class="nav-text"><span class="nav-name" id="nxg-title-nav">Nom du jeu à venir</span><span class="nav-sub">Diapositives · Médias · Histoire</span></span><span class="nav-arrow">›</span></div>
-        <div class="nav-item" onclick="window.open('/nyxia-des-3d.html?t='+sessionStorage.getItem('nyxia_token'),'_blank')"><span class="nav-icon">🎲</span><span class="nav-text"><span class="nav-name">Dés 3D NyXia</span><span class="nav-sub">Lancer les dés du jeu</span></span><span class="nav-arrow">›</span></div>
+        <div class="nav-item" id="nav-des" onclick="openAgentTab('des')"><span class="nav-icon">🎲</span><span class="nav-text"><span class="nav-name">Dés 3D NyXia</span><span class="nav-sub">Lancer les dés du jeu</span></span><span class="nav-arrow">›</span></div>
         <div class="nav-item" id="nav-compte" onclick="nxgOpenPanel('compte')"><span class="nav-icon">📊</span><span class="nav-text"><span class="nav-name">Voir mon tableau de bord</span></span><span class="nav-arrow">›</span></div>
       </div>
       <div class="sidebar-section">
@@ -578,7 +578,8 @@
       alexandra: '/chat-alexandra.html',
       gabrielle: '/chat-gabrielle.html',
      miroir: '/miroir.html',
-      coverstudio: '/studio-couverture.html'
+      coverstudio: '/studio-couverture.html',
+      des: '/nyxia-des-3d.html'
     }
 
     function openAgentTab(key) {
