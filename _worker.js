@@ -2121,7 +2121,7 @@ async function handleHelpdesk(request, env) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': env.SITE_URL || 'https://nyxia.top',
+        'HTTP-Referer': env.SITE_URL || 'https://portailgame.nyxia.top/',
         'X-Title': 'NyXia — Portail Léna (Accueil)'
       },
       body: JSON.stringify({
@@ -2628,7 +2628,7 @@ async function callAuthorModel(env, prompt, maxTokens = 1200) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': env.SITE_URL || 'https://nyxia.top',
+        'HTTP-Referer': env.SITE_URL || 'https://portailgame.nyxia.top/',
         'X-Title': 'NyXia — Portail Léna (Découvrir ces dons)'
       },
       body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature: 0.35, reasoning: { enabled: false } })
@@ -2992,28 +2992,15 @@ async function gameCaller(request, env, body) {
   if (!session?.email) return null;
   const role = String(session.role || '').toLowerCase();
   const admin = role === 'admin' || role === 'superadmin';
-
-  // Les admins et super-admins ont toujours accès — pas besoin de vérifier le KV client.
-  if (admin) return { session, client: null, allowed: true, admin: true, entitlement: null };
-
   const raw = await env.CASHFLOW_KV.get('client:' + String(session.email).toLowerCase());
   let client = null; try { client = raw ? JSON.parse(raw) : null; } catch (_) {}
   const id = gameId(env);
-
-  // Si GAME_ID n'est pas configuré : tous les comptes connectés ont accès (mode dev).
-  if (!id) return { session, client, allowed: true, admin: false, entitlement: null };
-
   const products = Array.isArray(client?.products) ? client.products.map(String) : [];
   const entitlement = client?.entitlements && id ? client.entitlements[id] : null;
   const exp = entitlement?.expiresAt ? Date.parse(entitlement.expiresAt) : null;
   const expires = Number.isFinite(exp) && exp < Date.now();
-
-  // Compte KV avec accès explicite OU compte D1 affiliate actif (rôle affiliate = accès au jeu de son cercle).
-  const hasKvAccess = !!client && client.active !== false && products.includes(id) && entitlement?.active !== false && !expires;
-  const hasD1Access = role === 'affiliate' && !client; // compte D1 sans entrée KV = accès de base
-
-  const allowed = hasKvAccess || hasD1Access;
-  return { session, client, allowed, admin: false, entitlement };
+  const allowed = admin || !id || (!!client && client.active !== false && products.includes(id) && entitlement?.active !== false && !expires);
+  return {session,client,allowed,admin,entitlement};
 }
 async function gamePublicInfo(env) {
   const p = await gameProduct(env);
@@ -3092,29 +3079,13 @@ export default {
 const url = new URL(request.url);
     const path = url.pathname;
 
-    // Lien parrainage
+    // La racine reste la page de vente. Les pages HTML utilisent les URL
+    // canoniques de Cloudflare (/login et /dashbord) : ne jamais rediriger
+    // vers leurs équivalents .html, sinon une boucle de redirections apparaît.
+    // Lien de création d'équipe / parrainage → inscription
     if (path.startsWith('/r/')) {
       const code = path.slice(3).split('/')[0];
       return Response.redirect(url.origin + '/inscription.html?ref=' + encodeURIComponent(code), 302);
-    }
-
-    // Pages toujours publiques — servies directement, AUCUNE redirection.
-    const PUBLIC_PATHS = ['/', '/index.html', '/login', '/login.html', '/inscription.html'];
-    if (PUBLIC_PATHS.includes(path)) {
-      if (env.ASSETS) {
-        // Servir login.html pour /login et /login.html
-        const serveUrl = (path === '/login')
-          ? new Request(url.origin + '/login.html', request)
-          : request;
-        return env.ASSETS.fetch(serveUrl);
-      }
-      return new Response('Page introuvable.', { status: 404 });
-    }
-
-    // /dashbord sans .html → on sert dashbord.html directement (pas de redirect)
-    if (path === '/dashbord') {
-      if (env.ASSETS) return env.ASSETS.fetch(new Request(url.origin + '/dashbord.html', request));
-      return new Response('Page introuvable.', { status: 404 });
     }
 
     try {
@@ -3197,15 +3168,13 @@ const url = new URL(request.url);
     if (path.startsWith('/api/')) return json({ error: 'Fonction introuvable.' }, 404);
 
     // Pages membres : session obligatoire (token ?t= ou session KV).
-    // Pages protégées — login.html et index.html sont TOUJOURS publiques.
-    const PROTECTED_PAGES = ['/dashbord.html', '/ovilus.html', '/jeu.html'];
+    const PROTECTED_PAGES = ['/dashbord', '/dashbord.html', '/ovilus', '/ovilus.html', '/jeu', '/jeu.html'];
     const isProtected = PROTECTED_PAGES.includes(path) || path.startsWith('/chat-');
     if (isProtected && env.CASHFLOW_KV) {
       const tok = url.searchParams.get('t') || url.searchParams.get('token') || gameCookieToken(request) || '';
       const session = tok ? await getSessionFromToken(env, tok) : null;
       if (!session) {
-        // Redirection directe vers login.html — jamais vers /login pour éviter toute boucle.
-        return Response.redirect(url.origin + '/login.html', 302);
+        return Response.redirect(url.origin + '/login', 302);
       }
     }
 
@@ -4012,7 +3981,7 @@ async function handleChat(request, env) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${env.OPENROUTER_API_KEY || env.AI_API_KEY}`,
-        'HTTP-Referer': env.SITE_URL || 'https://nyxia.top',
+        'HTTP-Referer': env.SITE_URL || 'https://portailgame.nyxia.top/',
         'X-Title': 'NyXia Game'
       },
       body: JSON.stringify({
@@ -4056,7 +4025,7 @@ async function handleChat(request, env) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${env.OPENROUTER_API_KEY || env.AI_API_KEY}`,
-        'HTTP-Referer': env.SITE_URL || 'https://nyxia.top',
+        'HTTP-Referer': env.SITE_URL || 'https://portailgame.nyxia.top/',
         'X-Title': 'NyXia — Portail Léna · Découvrir son don'
       },
       body: JSON.stringify({
@@ -4198,7 +4167,7 @@ Réponds en français (sauf demande contraire). Sois clair, structuré et utile.
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + apiKey,
-          'HTTP-Referer': env.SITE_URL || 'https://nyxia.top',
+          'HTTP-Referer': env.SITE_URL || 'https://portailgame.nyxia.top/',
           'X-Title': 'NyXia — Portail Léna · Découvrir ces dons'
         },
         body: JSON.stringify({
@@ -4240,36 +4209,32 @@ Réponds en français (sauf demande contraire). Sois clair, structuré et utile.
 // ───────────── ADMIN (Super Admin) ─────────────
 
 async function getAdminCredentials(env) {
-  // Déprécié — les credentials admin sont gérés par le Super Admin NyXia dans la KV partagée.
-  return null;
+  const raw = await env.CASHFLOW_KV.get('admin:credentials');
+  if (raw) return JSON.parse(raw);
+  // Première initialisation à partir du secret Cloudflare ADMIN_INITIAL_PASSWORD
+  const salt = randomSalt();
+  const hash = await hashPassword(env.ADMIN_INITIAL_PASSWORD, salt);
+  const creds = { salt, hash };
+  await env.CASHFLOW_KV.put('admin:credentials', JSON.stringify(creds));
+  return creds;
 }
 
 async function requireAdmin(request, env) {
-  // Lit directement la session KV partagée avec tous les portails NyXia.
-  // Compatible Super Admin : le rôle est écrit par ton portail Super Admin dans session:TOKEN.
-  const token = request.headers.get('X-Admin-Token')
-    || request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '')
-    || (await request.clone().json().catch(() => ({}))).token
-    || '';
+  const token = request.headers.get('X-Admin-Token');
   if (!token) return false;
-  const raw = await env.CASHFLOW_KV.get('session:' + token);
-  if (!raw) return false;
-  try {
-    const session = JSON.parse(raw);
-    const role = String(session.role || '').toLowerCase();
-    return role === 'admin' || role === 'superadmin';
-  } catch (_) { return false; }
+  const raw = await env.CASHFLOW_KV.get(`admin_session:${token}`);
+  return !!raw;
 }
 
 async function handleAdminLogin(request, env) {
-  // Les admins se connectent via /api/login standard avec leur compte D1 (role = admin | superadmin).
-  // Cette route legacy est conservée pour compatibilité mais redirige vers /api/login.
-  const body = await request.json().catch(() => ({}));
-  return handleLogin(new Request(request.url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: body.email || '', password: body.password || '' })
-  }), env);
+  const { password } = await request.json();
+  const creds = await getAdminCredentials(env);
+  const valid = await verifyPassword(password, creds.salt, creds.hash);
+  if (!valid) return json({ error: 'Mot de passe incorrect.' }, 401);
+
+  const token = randomToken();
+  await env.CASHFLOW_KV.put(`admin_session:${token}`, '1', { expirationTtl: ADMIN_SESSION_TTL });
+  return json({ success: true, token });
 }
 
 async function handleAdminListClients(request, env) {
@@ -4368,8 +4333,16 @@ async function handleAdminDeleteClient(request, env) {
 }
 
 async function handleAdminChangePassword(request, env) {
-  // Le changement de mot de passe admin est géré par le Super Admin NyXia.
-  return json({ error: 'Utilisez le Super Admin NyXia pour changer le mot de passe.' }, 410);
+  if (!await requireAdmin(request, env)) return json({ error: 'Non autorisé.' }, 401);
+  const { currentPassword, newPassword } = await request.json();
+  const creds = await getAdminCredentials(env);
+  const valid = await verifyPassword(currentPassword, creds.salt, creds.hash);
+  if (!valid) return json({ error: 'Mot de passe actuel incorrect.' }, 401);
+
+  const salt = randomSalt();
+  const hash = await hashPassword(newPassword, salt);
+  await env.CASHFLOW_KV.put('admin:credentials', JSON.stringify({ salt, hash }));
+  return json({ success: true });
 }
 
 // ───────────── MESSAGERIE INTERNE ─────────────
