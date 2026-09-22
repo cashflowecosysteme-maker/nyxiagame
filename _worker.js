@@ -4,7 +4,7 @@
 
 const SYSTEM_PROMPTS = {
   // 💜 DIANE — Créatrice · coach personnelle · motivation
-  diane: `Tu incarnes **Diane Boyer** dans le portail **Léna — À la découverte de tes dons**.
+  diane: `Tu incarnes **Diane Boyer** dans le portail **NyXia Game**.
 
 Tu es la créatrice de l'univers NyXia, l'autrice des enseignements et la conceptrice des formations. Tu représentes sa présence formatrice numérique : une réplique fidèle de sa manière personnelle de coacher, de questionner, d'encourager et de remettre une personne en mouvement.
 
@@ -3021,6 +3021,38 @@ function gameNpcsFromProduct(p) {
   }).filter(Boolean);
 }
 async function gameFindNpc(env,id) { const p = await gameProduct(env);return gameNpcsFromProduct(p).find(n=>n.id===id)||null; }
+// Only media URLs explicitly included in the compiled NPC record can be sent to its chat.
+function gameNpcApprovedMedia(brain) {
+  const result={PDF:[],AUDIO:[],VIDEO:[]};const visited=new Set();
+  function add(raw,kind){
+    if(typeof raw!=='string'||!result[kind]||result[kind].length>=40)return;
+    const url=normalizeApprovedVideoUrl(raw.trim());
+    if(url&&!result[kind].includes(url))result[kind].push(url);
+  }
+  function scan(node,key='',depth=0){
+    if(depth>8||node==null)return;
+    if(typeof node==='string'){
+      const marker=node.match(/\[(PDF|AUDIO|VIDEO)\s*:\s*(https:\/\/[^\]\s]+)\]/ig)||[];
+      marker.forEach(m=>{const parsed=m.match(/^\[(PDF|AUDIO|VIDEO)\s*:\s*(https:\/\/[^\]\s]+)/i);if(parsed)add(parsed[2],parsed[1].toUpperCase())});
+      if(/^https:\/\//i.test(node)){
+        if(/pdf|document|fiche|fichier/i.test(key)||/\.pdf(?:[?#]|$)/i.test(node))add(node,'PDF');
+        else if(/audio|mp3|musique|son/i.test(key)||/\.(?:mp3|m4a|wav|ogg)(?:[?#]|$)/i.test(node))add(node,'AUDIO');
+        else if(/video|vidéo|film|clip/i.test(key)||/\.(?:mp4|webm|mov|m4v)(?:[?#]|$)/i.test(node))add(node,'VIDEO');
+      }
+      return;
+    }
+    if(typeof node!=='object'||visited.has(node))return;
+    visited.add(node);
+    if(Array.isArray(node)){node.forEach(item=>scan(item,key,depth+1));return;}
+    const typed=String(node.type||node.kind||node.mime||node.format||'').toLowerCase();
+    const link=node.url||node.href||node.src||node.lien;
+    if(/pdf/.test(typed))add(link,'PDF');
+    else if(/audio|mp3|m4a/.test(typed))add(link,'AUDIO');
+    else if(/video|vidéo|mp4|webm/.test(typed))add(link,'VIDEO');
+    Object.entries(node).forEach(([k,v])=>scan(v,k,depth+1));
+  }
+  scan(brain);return result;
+}
 function gameNpcPrompt(npc) {
   return `Tu interprètes exclusivement le PNJ fictif ${npc.name} dans CE jeu pour le MJ. Ne confonds jamais ton histoire avec un autre jeu. Utilise uniquement la fiche de personnage et les scènes fournies; ne crée pas de révélation, indice, action ni conséquence absente. Si une donnée manque, dis-le au MJ sans inventer. FICHE DU PNJ : ${JSON.stringify(npc.brain).slice(0,13000)}`;
 }
@@ -3168,7 +3200,7 @@ const url = new URL(request.url);
     if (path.startsWith('/api/')) return json({ error: 'Fonction introuvable.' }, 404);
 
     // Pages membres : session obligatoire (token ?t= ou session KV).
-    const PROTECTED_PAGES = ['/dashbord', '/dashbord.html', '/ovilus', '/ovilus.html', '/jeu', '/jeu.html'];
+    const PROTECTED_PAGES = ['/dashbord', '/dashbord.html', '/ovilus', '/ovilus.html', '/jeu', '/jeu.html', '/nyxia-des-3d.html'];
     const isProtected = PROTECTED_PAGES.includes(path) || path.startsWith('/chat-');
     if (isProtected && env.CASHFLOW_KV) {
       const tok = url.searchParams.get('t') || url.searchParams.get('token') || gameCookieToken(request) || '';
@@ -3839,6 +3871,14 @@ async function handleChat(request, env) {
   let approvedLivingVideoUrls = [];
   let approvedLivingAudioUrls = [];
   let approvedLivingImageUrls = [];
+  let approvedNpcPdfUrls = [];
+  if (npcInfo) {
+    const available = gameNpcApprovedMedia(npcInfo.brain);
+    approvedLivingVideoUrls = available.VIDEO;
+    approvedLivingAudioUrls = available.AUDIO;
+    approvedNpcPdfUrls = available.PDF;
+    systemPrompt += `\n\nMÉDIAS AUTORISÉS DE CE PERSONNAGE : ${JSON.stringify(available)}. Si le maître du jeu demande un de ces fichiers, donne uniquement son URL exacte avec un marqueur [PDF: URL], [AUDIO: URL] ou [VIDEO: URL]. Si un fichier manque, dis qu'il n'est pas disponible : n'invente rien.`;
+  }
   let videoProtocolAdded = false;
   // Suivi de la Formation Vivante (Léna) pour sauvegarder la progression après génération.
   let formationSave = null;
@@ -3975,39 +4015,50 @@ async function handleChat(request, env) {
     messages.push({ role: 'user', content: message || '' });
   }
 
-  async function callModel(model) {
-    return await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${env.OPENROUTER_API_KEY || env.AI_API_KEY}`,
-        'HTTP-Referer': env.SITE_URL || 'https://portailgame.nyxia.top/',
-        'X-Title': 'NyXia Game'
+  // Shared model request: modest output limit supported by both selected models.
+  // Secrets, user messages and provider error text never enter logs or public responses.
+  async function callModel(model, turns=messages) {
+    const apiKey = env.OPENROUTER_API_KEY || env.AI_API_KEY;
+    if (!apiKey) {
+      console.error('NYXIA_GAME_CHAT', {model,code:'NO_API_BINDING'});
+      return null;
+    }
+    const payload={model,messages:turns,max_tokens:4096};
+    if(model===OPENROUTER_MODEL)payload.reasoning={enabled:false};
+    const response=await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':`Bearer ${apiKey}`,
+        'HTTP-Referer':env.SITE_URL || 'https://portailgame.nyxia.top/',
+        'X-Title':'NyXia Game'
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        max_tokens: 32000,
-        reasoning: { enabled: false }
-      })
+      body:JSON.stringify(payload)
     });
+    if(!response.ok){
+      let code='UNSPECIFIED';
+      try{const detail=await response.clone().json();code=String(detail?.error?.code||detail?.error?.type||code).slice(0,64)}catch(_){ }
+      console.error('NYXIA_GAME_CHAT', {model,status:response.status,code});
+    }
+    return response;
   }
 
-  // Modèle principal deepseek-v3.2, repli automatique sur mistral-small.
-  let resp = await callModel(OPENROUTER_MODEL);
-  let usedModel = OPENROUTER_MODEL;
-  if (!resp.ok) {
-    resp = await callModel(OPENROUTER_FALLBACK_MODEL);
-    usedModel = OPENROUTER_FALLBACK_MODEL;
+  let resp=null,usedModel=OPENROUTER_MODEL;
+  for(const model of [OPENROUTER_MODEL,OPENROUTER_FALLBACK_MODEL]){
+    try{
+      const candidate=await callModel(model);
+      if(candidate?.ok){resp=candidate;usedModel=model;break;}
+      if(candidate===null)break;
+    }catch(e){console.error('NYXIA_GAME_CHAT',{model,code:'NETWORK_OR_FETCH_ERROR',type:e?.name||'Error'});}
   }
-
-  if (!resp.ok) {
-    return json({ content: 'Petite interruption... réessaies dans un instant 💜' });
+  if(!resp) return json({content:'La conversation est momentanément indisponible. Réessaie dans un instant ou contacte notre équipe si le problème persiste.'},502);
+  const data=await resp.json().catch(()=>null);
+  if(!data?.choices?.length){
+    console.error('NYXIA_GAME_CHAT',{model:usedModel,code:'INVALID_OR_EMPTY_RESPONSE'});
+    return json({content:'La réponse est momentanément indisponible. Réessaie dans un instant.'},502);
   }
-
-  let data = await resp.json();
-  let content = data.choices?.[0]?.message?.content || '';
-  let finish = data.choices?.[0]?.finish_reason || '';
+  let content=data.choices[0]?.message?.content||'';
+  let finish=data.choices[0]?.finish_reason||'';
 
   // Si le modèle coupe (plafond de sortie), on continue automatiquement jusqu'à 3 fois
   const continueMessages = messages.slice();
@@ -4020,23 +4071,11 @@ async function handleChat(request, env) {
       role: 'user',
       content: 'Continue exactement où tu t\'es arrêté. Ne répète pas ce qui est déjà écrit. Reprends en milieu de phrase si besoin et termine TOUTE la réponse / le prompt complet.'
     });
-    const contResp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${env.OPENROUTER_API_KEY || env.AI_API_KEY}`,
-        'HTTP-Referer': env.SITE_URL || 'https://portailgame.nyxia.top/',
-        'X-Title': 'NyXia — Portail Léna · Découvrir son don'
-      },
-      body: JSON.stringify({
-        model: usedModel,
-        messages: continueMessages,
-        max_tokens: 32000,
-        reasoning: { enabled: false }
-      })
-    });
-    if (!contResp.ok) break;
-    const contData = await contResp.json();
+    let contResp;
+    try{contResp=await callModel(usedModel,continueMessages);}catch(e){console.error('NYXIA_GAME_CHAT',{model:usedModel,code:'CONTINUATION_ERROR',type:e?.name||'Error'});break;}
+    if(!contResp?.ok)break;
+    const contData=await contResp.json().catch(()=>null);
+    if(!contData?.choices?.length)break;
     const piece = contData.choices?.[0]?.message?.content || '';
     finish = contData.choices?.[0]?.finish_reason || '';
     if (!piece) break;
@@ -4046,8 +4085,9 @@ async function handleChat(request, env) {
 
   content = sanitizeLivingVideoMarkers(content, approvedLivingVideoUrls);
   content = sanitizeApprovedMediaMarkers(content, 'AUDIO', approvedLivingAudioUrls, 3);
+  if (npcInfo) content = sanitizeApprovedMediaMarkers(content, 'PDF', approvedNpcPdfUrls, 3);
   content = sanitizeApprovedMediaMarkers(content, 'PHOTO', approvedLivingImageUrls, 3);
-  if (!content) content = 'Petite interruption... réessaies dans un instant 💜';
+  if (!content) {console.error('NYXIA_GAME_CHAT',{model:usedModel,code:'EMPTY_TEXT'});return json({content:'Aucune réponse reçue. Réessaie dans un instant.'},502);}
 
   // Sauvegarde discrète de la progression de Formation Vivante (Léna) après une action réelle de la personne.
   if (formationSave && session && session.email) {
