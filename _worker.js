@@ -3076,11 +3076,52 @@ async function gamePrivateConfig(request,env){
   if(env.DB && auth.session.userId && id){try{const r=await env.DB.prepare("SELECT id, product_id, amount, currency, status, created_at FROM commissions WHERE beneficiary_id = ? AND product_id = ? AND status = 'paid' ORDER BY created_at DESC LIMIT 100").bind(auth.session.userId,id).all();sales=r.results||[];}catch(_){sales=[];}}
   return json({game:safeP,owned:!!(id&&auth.client?.products?.includes(id)),allowed:auth.allowed,admin:auth.admin,accessEnd:auth.entitlement?.expiresAt||null,sales,events,shopUrl:p?.shopUrl||env.GAME_SHOP_URL||'',directoryUrl:p?.directoryUrl||env.GAME_DIRECTORY_URL||''});
 }
+// Correspondances publiquement neutres écrites au moment de la compilation.
+// Le produit (secrets, PNJ, règles MJ) reste EXCLUSIVEMENT en CASHFLOW_KV.
+async function gameCompiledMediaMap(request,env){
+ if(!env.ASSETS)return {};
+ try{
+  const response=await env.ASSETS.fetch(new Request(new URL('/game-manifest.json',request.url)));
+  if(!response.ok)return {};
+  const manifest=await response.json();
+  if(manifest?.gameId!==gameId(env)||manifest?.mediaMode!=='embedded'||!Array.isArray(manifest.mediaFiles))return {};
+  return Object.fromEntries(manifest.mediaFiles.filter(x=>
+   /^https:\/\//.test(String(x?.url||''))&&/^\/media\/[a-z0-9_./-]+\.(?:png|jpe?g|webp|gif|mp3|wav|ogg|m4a|mp4|webm)$/i.test(String(x?.path||''))&&
+   !String(x.path).includes('..')).map(x=>[x.url,x.path]));
+ }catch(_){return {}}
+}
 async function gameSlides(request,env){
  const b=await request.json().catch(()=>({}));const a=await gameCaller(request,env,b);
  if(!a)return json({error:'Connexion requise.'},401);if(!a.allowed)return json({error:'Accès indisponible.'},403);
  const p=await gameProduct(env);if(!p)return json({title:'Nom du jeu à venir',scenes:[]});
- return json({title:p.title,scenes:(p.guidedScenes||[]).map(s=>({id:s.id,phase:s.phase,title:s.title,readAloud:s.readAloud,announcement:s.announcement,playerObjective:s.playerObjective,breakout:s.breakout,media:s.media}))});
+ const mediaMap=await gameCompiledMediaMap(request,env);
+ const scenes=(p.guidedScenes||[]).map(s=>{
+  const media=s.media||{},rewrite=url=>mediaMap[url]||url||'';
+  const mediaSafe={...media,imageUrl:rewrite(media.imageUrl),audioUrl:rewrite(media.audioUrl),videoUrl:rewrite(media.videoUrl),items:Array.isArray(media.items)?media.items.map(m=>({...m,url:rewrite(m.url)})):[]};
+  return {id:s.id,phase:s.phase,title:s.title,readAloud:s.readAloud,announcement:s.announcement,playerObjective:s.playerObjective,breakout:s.breakout,media:mediaSafe};
+ });
+ return json({gameId:gameId(env),title:p.title,scenes});
+}
+// Progression de la présentation : uniquement dans la KV centrale, par jeu et par membre.
+// Jamais d'identifiant de jeu arbitraire dans le corps de la requête.
+async function gameSlidesProgress(request,env){
+ const body=await request.json().catch(()=>({}));
+ const caller=await gameCaller(request,env,body);
+ if(!caller)return json({error:'Connexion requise.'},401);
+ if(!caller.allowed)return json({error:'Jeu inaccessible.'},403);
+ const id=gameId(env);if(!id||!env.CASHFLOW_KV)return json({error:'Jeu non configuré.'},503);
+ const key='nyxia-game:slides:'+id+':'+String(caller.session.email||'').toLowerCase();
+ if(body.action==='get'){
+  const record=await env.CASHFLOW_KV.get(key,'json');
+  return json({index:Number.isSafeInteger(record?.index)?record.index:0,updatedAt:record?.updatedAt||null});
+ }
+ if(!Number.isSafeInteger(body.index)||body.index<0||body.index>15000)return json({error:'Position invalide.'},400);
+ const product=await gameProduct(env);if(!product)return json({error:'Jeu introuvable.'},404);
+ const max=(product.guidedScenes||[]).reduce((n,scene)=>n+1+(Array.isArray(scene?.media?.items)?scene.media.items.length:0),0);
+ if(body.index>=max)return json({error:'Position hors du jeu.'},400);
+ const updatedAt=new Date().toISOString();
+ await env.CASHFLOW_KV.put(key,JSON.stringify({index:body.index,updatedAt}),{expirationTtl:60*60*24*90});
+ return json({ok:true,index:body.index,updatedAt});
 }
 async function gameResource(request,env){
  const b=await request.json().catch(()=>({}));const a=await gameCaller(request,env,b);
@@ -3125,6 +3166,7 @@ const url = new URL(request.url);
       if (path === '/api/game/public' && request.method === 'GET') return await gamePublicInfo(env);
       if (path === '/api/game/config' && request.method === 'POST') return await gamePrivateConfig(request, env);
       if (path === '/api/game/slides' && request.method === 'POST') return await gameSlides(request, env);
+      if (path === '/api/game/slides/progress' && request.method === 'POST') return await gameSlidesProgress(request, env);
       if (path === '/api/game/events' && request.method === 'POST') return await gameEvents(request, env);
       if (path === '/api/game/resource' && request.method === 'POST') return await gameResource(request, env);
       if (path === '/api/login' && request.method === 'POST') return await handleLogin(request, env);
@@ -3198,6 +3240,16 @@ const url = new URL(request.url);
     }
 
     if (path.startsWith('/api/')) return json({ error: 'Fonction introuvable.' }, 404);
+
+    // Les médias intégrés au ZIP ne sont jamais servis avant validation du droit d'accès.
+    if (path.startsWith('/media/')) {
+      if (!gameId(env) || !env.ASSETS) return json({error:'Jeu non configuré.'},503);
+      const caller=await gameCaller(request,env,{});
+      if (!caller) return json({error:'Connexion requise.'},401);
+      if (!caller.allowed) return json({error:'Ce jeu est inaccessible.'},403);
+      return env.ASSETS.fetch(request);
+    }
+
 
     // Pages membres : session obligatoire (token ?t= ou session KV).
     const PROTECTED_PAGES = ['/dashbord', '/dashbord.html', '/ovilus', '/ovilus.html', '/jeu', '/jeu.html', '/nyxia-des-3d.html'];
