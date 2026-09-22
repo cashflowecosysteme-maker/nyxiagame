@@ -59,6 +59,8 @@
             <span class="nav-dropdown-chevron" aria-hidden="true">⌄</span>
           </button>
           <div class="nav-dropdown-menu" id="nxg-characters-menu"></div>
+          <select id="nxg-npc-picker" onchange="nxgSelectNpc(this.value)" hidden style="display:none" aria-hidden="true"><option value="">Aucun PNJ pour le moment</option></select>
+          <div id="nxg-npc-nav" hidden></div>
         </div>
       </div>
       <div class="sidebar-section">
@@ -66,12 +68,6 @@
         <div class="nav-item" id="nav-jeu" onclick="nxgOpenPanel('jeu')"><span class="nav-icon">🎮</span><span class="nav-text"><span class="nav-name" id="nxg-title-nav">Nom du jeu à venir</span><span class="nav-sub">Diapositives · Médias · Histoire</span></span><span class="nav-arrow">›</span></div>
         <div class="nav-item" id="nav-des" onclick="openAgentTab('des')"><span class="nav-icon">🎲</span><span class="nav-text"><span class="nav-name">Dés 3D NyXia</span><span class="nav-sub">Lancer les dés du jeu</span></span><span class="nav-arrow">›</span></div>
         <div class="nav-item" id="nav-compte" onclick="nxgOpenPanel('compte')"><span class="nav-icon">📊</span><span class="nav-text"><span class="nav-name">Voir mon tableau de bord</span></span><span class="nav-arrow">›</span></div>
-      </div>
-      <div class="sidebar-section">
-        <div class="sidebar-label">Personnages non joueurs</div>
-        <label class="nxg-picker-label" for="nxg-npc-picker">Choisir un PNJ</label>
-        <select id="nxg-npc-picker" onchange="nxgSelectNpc(this.value)"><option value="">Aucun PNJ pour le moment</option></select>
-        <div id="nxg-npc-nav"></div>
         <div class="nav-item" id="nav-carte" onclick="nxgOpenPanel('carte')"><span class="nav-icon">🗺️</span><span class="nav-text"><span class="nav-name">Carte du jeu</span></span><span class="nav-arrow">›</span></div>
       </div>
       <div class="sidebar-section">
