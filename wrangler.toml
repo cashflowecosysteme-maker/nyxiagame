@@ -32,7 +32,7 @@ binding = "VECTORIZE_INDEX"
 index_name = "univers-livres"
 
 [vars]
-SITE_URL = "https://nyxia.top"
+SITE_URL = "https://portailgame.nyxia.top/"
 GAME_ID = ""
 PORTAIL = "nyxia-game-modele"
 [[kv_namespaces]]
