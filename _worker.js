@@ -3092,20 +3092,28 @@ export default {
 const url = new URL(request.url);
     const path = url.pathname;
 
-    // Alias de navigation — une seule redirection, jamais en chaîne.
-    if (path === '/login')    return Response.redirect(url.origin + '/login.html', 302);
-    if (path === '/dashbord') return Response.redirect(url.origin + '/dashbord.html', 302);
-
     // Lien parrainage
     if (path.startsWith('/r/')) {
       const code = path.slice(3).split('/')[0];
       return Response.redirect(url.origin + '/inscription.html?ref=' + encodeURIComponent(code), 302);
     }
 
-    // Pages toujours publiques — le worker ne les touche pas.
-    const PUBLIC_PATHS = ['/', '/index.html', '/login.html', '/inscription.html'];
+    // Pages toujours publiques — servies directement, AUCUNE redirection.
+    const PUBLIC_PATHS = ['/', '/index.html', '/login', '/login.html', '/inscription.html'];
     if (PUBLIC_PATHS.includes(path)) {
-      if (env.ASSETS) return env.ASSETS.fetch(request);
+      if (env.ASSETS) {
+        // Servir login.html pour /login et /login.html
+        const serveUrl = (path === '/login')
+          ? new Request(url.origin + '/login.html', request)
+          : request;
+        return env.ASSETS.fetch(serveUrl);
+      }
+      return new Response('Page introuvable.', { status: 404 });
+    }
+
+    // /dashbord sans .html → on sert dashbord.html directement (pas de redirect)
+    if (path === '/dashbord') {
+      if (env.ASSETS) return env.ASSETS.fetch(new Request(url.origin + '/dashbord.html', request));
       return new Response('Page introuvable.', { status: 404 });
     }
 
