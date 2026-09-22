@@ -50,7 +50,7 @@
   <script src="/js/starry-bg.js" defer></script>
   <script>
   /* ═══════════════════════════════════════════════════════════════════
-     PAGE DIANE AUTONOME — isolée du Dashboard, verrouillée sur l'agent « diane ».
+     PAGE PNJ AUTONOME — même chat individuel que les personnages principaux.
   ═══════════════════════════════════════════════════════════════════ */
 
   var _currentAgent = 'pnj'
@@ -712,11 +712,26 @@
   // Convertit les marqueurs média d'une formation en vrais éléments cliquables/lisibles.
   function foExtractMedia(raw){
     var media=[]; var text=String(raw==null?'':raw);
+    // Les documents sont affichés dans la conversation ; un lien reste disponible si l'hébergeur refuse l'iframe.
+    function npcSafeMediaUrl(rawUrl){
+      try{var u=new URL(String(rawUrl||'').trim(),location.href);return u.protocol==='https:'||(u.origin===location.origin&&u.protocol==='http:')?u.href:''}catch(_){return ''}
+    }
+    function npcPdfNode(url,label){
+      var box=document.createElement('div');box.className='npc-pdf';
+      var title=document.createElement('div');title.className='npc-pdf-title';title.textContent='📄 '+(label||'Document PDF');box.appendChild(title);
+      var frame=document.createElement('iframe');frame.src=url;frame.title=label||'Document PDF';frame.loading='lazy';box.appendChild(frame);
+      var link=document.createElement('a');link.href=url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Ouvrir ou télécharger le PDF';box.appendChild(link);
+      return box;
+    }
+    text=text.replace(/\[(?:PDF|DOCUMENT)\s*:\s*([^\]\r\n]+)\]/gi,function(_,raw){
+      var parts=raw.split('|');var url=npcSafeMediaUrl(parts[0]);if(!url)return '';
+      media.push(npcPdfNode(url,(parts[1]||'Document PDF').trim()));return '';
+    });
     function ytId(u){ var m=u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/); return m?m[1]:null; }
     function vimeoId(u){ var m=u.match(/vimeo\.com\/(?:video\/)?(\d+)/); return m?m[1]:null; }
     function driveId(u){ var m=String(u).match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=[^&]+&)?id=)([A-Za-z0-9_-]+)/); return m?m[1]:null; }
     text=text.replace(/\[VIDEO\s*:\s*([^\]\r\n]+)\]/gi,function(_,url){
-      url=url.trim(); var wrap=document.createElement('div'); wrap.style.cssText='margin:10px 0;max-width:640px';
+      url=npcSafeMediaUrl(url);if(!url)return ''; var wrap=document.createElement('div'); wrap.style.cssText='margin:10px 0;max-width:640px';
       var yt=ytId(url), vim=vimeoId(url);
       if(yt||vim){
         var box=document.createElement('div'); box.style.cssText='position:relative;width:100%;padding-top:56.25%;border-radius:14px;overflow:hidden;border:1px solid rgba(123,92,255,.25)';
@@ -737,7 +752,7 @@
       media.push(wrap); return '';
     });
     text=text.replace(/\[AUDIO\s*:\s*([^\]\r\n]+)\]/gi,function(_,url){
-      url=url.trim(); var gd=driveId(url);
+      url=npcSafeMediaUrl(url);if(!url)return ''; var gd=driveId(url);
       if(gd){ var db=document.createElement('div'); db.style.cssText='margin:10px 0;max-width:520px';
         var di=document.createElement('iframe'); di.src='https://drive.google.com/file/d/'+gd+'/preview'; di.allow='autoplay';
         di.style.cssText='width:100%;height:120px;border:0;border-radius:12px;background:#0f1c3f'; db.appendChild(di); media.push(db); return ''; }
@@ -745,11 +760,19 @@
       au.style.cssText='width:100%;max-width:520px;margin:10px 0;display:block'; media.push(au); return '';
     });
     text=text.replace(/\[PHOTO\s*:\s*([^\]\r\n]+)\]/gi,function(_,url){
-      url=url.trim(); var im=document.createElement('img'); im.src=url; im.alt='illustration'; im.loading='lazy';
+      url=npcSafeMediaUrl(url);if(!url)return ''; var im=document.createElement('img'); im.src=url; im.alt='illustration'; im.loading='lazy';
       im.style.cssText='max-width:100%;width:auto;max-height:520px;border-radius:14px;border:1px solid rgba(123,92,255,.25);display:block;margin:10px 0'; media.push(im); return '';
     });
     text=text.replace(/\[LIEN\s*:\s*([^\]\r\n]+)\]/gi,function(_,payload){
-      var parts=String(payload).split('|'); var url=parts[0].trim(); var label=(parts[1]||'').trim()||'Ouvrir le lien';
+      var parts=String(payload).split('|'); var url=npcSafeMediaUrl(parts[0]);var label=(parts[1]||'').trim()||'Ouvrir le lien';
+      if(!url)return '';
+      if(/\.pdf(?:[?#]|$)/i.test(url)){media.push(npcPdfNode(url,label));return '';}
+      if(/\.(mp3|m4a|wav|ogg|opus)(?:[?#]|$)/i.test(url)){
+        var audio=document.createElement('audio');audio.src=url;audio.controls=true;audio.preload='metadata';audio.className='npc-audio';media.push(audio);return '';
+      }
+      if(/\.(mp4|webm|m4v|mov)(?:[?#]|$)/i.test(url)){
+        var video=document.createElement('video');video.src=url;video.controls=true;video.playsInline=true;video.preload='metadata';video.className='npc-video';media.push(video);return '';
+      }
       var a=document.createElement('a'); a.href=url; a.target='_blank'; a.rel='noopener'; a.textContent='🔗 '+label;
       a.style.cssText='display:inline-block;margin:10px 0;padding:11px 18px;border-radius:12px;background:linear-gradient(135deg,#7B5CFF,#9d7bff);color:#fff;text-decoration:none;font-weight:600'; media.push(a); return '';
     });
